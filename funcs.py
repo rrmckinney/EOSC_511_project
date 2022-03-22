@@ -125,6 +125,15 @@ def scheme(c, u, k, n_grid, dt, dx):
 #     h.next[1:n_grid - 1] = (h.prev[1:n_grid - 1]
 #                             - gh * (u.now[2:n_grid] - u.now[:n_grid - 2]))
 
+def nsdf(c,u,K, n_grid,dt,dx):
+  """The non-standard finite difference method given by (Appadu, 2013, doi: 10.1155/2013/734374)"""
+  k = 0.005 # given by paper as most accurate coefficient
+  h = 0.02  # given by paper as most accurate coeficient
+  a1 = k/h  # coefficient to tidy up equation
+  b1 = a/(np.exp(h/K)-1) # coefficient to tidy up equation
+  
+  for pt in np.arange(1, n_grid-1):
+    c.next[pt] = b1*c.now[pt+1]+(1-a1*u-2*b1)*c.now[pt]+(a1*u+b1)*c.now[pt-1]
 
 def make_graph(u, h, dt, n_time):
     """Create graphs of the model results using matplotlib.
