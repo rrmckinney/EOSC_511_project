@@ -58,7 +58,6 @@ class Quantity(object):
         # later for post-processing (such as plotting).
         self.store = np.empty((n_grid, n_time))
 
-
     def store_timestep(self, time_step, attr='next'):
         """Copy the values for the specified time step to the storage
         array.
@@ -93,11 +92,12 @@ class Quantity(object):
         self.now = copy.copy(self.next)
 
 
-def initial_conditions(c,c1):
+def initial_conditions(c1,c, n_grid):
     """Set the initial condition values.
     """
-    c.now[1:n_grid - 1] = 0
-    c.now[0] = c1
+    c.now[0:n_grid - 1] = 0
+    c.now[int(n_grid/3)] = c1
+    
 
 def boundary_conditions(c_array, n_grid):
     """Set the boundary condition values.
@@ -118,7 +118,9 @@ def scheme(c, u, k, n_grid, dt, dx):
     derived from equations 4.16 and 4.17.
     """
     for pt in np.arange(1, n_grid - 1):
-        c.next[pt] = c.now[pt] - u*(dt/dx)*(c.now[pt + 1] - c.now[pt])  + k* (dt/(dx^2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1]) 
+
+        c.next[pt] = c.now[pt] - u*(dt/dx)*(c.now[pt] - c.now[pt-1])  + k* (dt/(dx**2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1]) 
+
 #     Alternate vectorized implementation:
 #     u.next[1:n_grid - 1] = (u.prev[1:n_grid - 1]
 #                             - gu * (h.now[2:n_grid] - h.now[:n_grid - 2]))
@@ -135,7 +137,7 @@ def nsdf(c,u,K, n_grid,dt,dx):
   for pt in np.arange(1, n_grid-1):
     c.next[pt] = b1*c.now[pt+1]+(1-a1*u-2*b1)*c.now[pt]+(a1*u+b1)*c.now[pt-1]
 
-def make_graph(u, h, dt, n_time):
+def make_graph(c, dt, n_time):
     """Create graphs of the model results using matplotlib.
 
     You probably need to run the rain script from within ipython,
@@ -145,13 +147,13 @@ def make_graph(u, h, dt, n_time):
     """
 
     # Create a figure with 2 sub-plots
-    fig, (ax_u, ax_h) = plt.subplots(2,1, figsize=(10,10))
+    fig, (ax_c) = plt.subplots(1,1, figsize=(10,10))
 
     # Set the figure title, and the axes labels.
     the_title = fig.text(0.25, 0.95, 'Results from t = %.3fs to %.3fs' % (0, dt*n_time))
-    ax_u.set_ylabel('u [cm/s]')
-    ax_h.set_ylabel('h [cm]')
-    ax_h.set_xlabel('Grid Point')
+    ax_c.set_ylabel('c [mg/m^3]')
+    #ax_h.set_ylabel('h [cm]')
+    ax_c.set_xlabel('Grid Point')
 
     # We use color to differentiate lines at different times.  Set up the color map
     cmap = plt.get_cmap('viridis')
@@ -166,8 +168,9 @@ def make_graph(u, h, dt, n_time):
     # Do the main plot
     for time in range(0, n_time, interval):
         colorVal = scalarMap.to_rgba(time)
-        ax_u.plot(u.store[:, time], color=colorVal)
-        ax_h.plot(h.store[:, time], color=colorVal)
+        ax_c.plot(c.store[:, time], color=colorVal)
+        #ax_h.plot(h.store[:, time], color=colorVal)
+
 
     # Add the custom colorbar
     ax2 = fig.add_axes([0.95, 0.05, 0.05, 0.9])
@@ -188,17 +191,19 @@ def numeric(args):
     # Constants and parameters of the model
     u = 3.39 #wind speed in x direction in m/s
     k = 2    #eddy diffusivity coefficient in m^2/s
-    c1 = 1   #initial pollution amount g/m3
-    dt = 0.001                  # time step [s]
-    dx = 1   #stepsize
-    
+    c1 = 100.0   #initial pollution amount g/m3
+    domain_length = 200000 #200km
+ 
+    dx = domain_length/n_grid   #stepsize
+    dt = 0.4 * dx/ u                  # time step [s]
     # Create velocity and surface height objects
     c = Quantity(n_grid, n_time)
 
     # Set up initial conditions and store them in the time step
     # results arrays
-    initial_conditions(c1,c)
-    #c.store_timestep(0, 'prev')
+
+    initial_conditions(c1,c, n_grid)
+    #c.store_timestep(0, 'now')
 
     # Calculate the first time step values from the
     # predictor-corrector, apply the boundary conditions, and store
@@ -206,21 +211,25 @@ def numeric(args):
     
     #first_time_step(u, h, g, H, dt, dx, ho, gu, gh, n_grid)
     boundary_conditions(c.now, n_grid)
-    c.store_timestep(1, 'now')
+    
+    c.store_timestep(0, 'now')
+
 
     # Time step loop using leap-frog scheme
-    for t in np.arange(2, n_time):
+    for t in np.arange(1, n_time):
         # Advance the solution and apply the boundary conditions
         scheme(c, u, k, n_grid, dt, dx)
         boundary_conditions(c.next, n_grid)
         # Store the values in the time step results arrays, and shift
         # .now to .prev, and .next to .now in preparation for the next
         # time step
+
         c.store_timestep(t)
+#         print('c_curent',c.now)
         c.shift()
 
     # Plot the results as colored graphs
-    make_graph(u, h, dt, n_time)
+    make_graph(c, dt, n_time)
     return
 
 
