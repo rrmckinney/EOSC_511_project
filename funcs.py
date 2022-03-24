@@ -58,7 +58,6 @@ class Quantity(object):
         # later for post-processing (such as plotting).
         self.store = np.empty((n_grid, n_time))
 
-
     def store_timestep(self, time_step, attr='next'):
         """Copy the values for the specified time step to the storage
         array.
@@ -96,10 +95,9 @@ class Quantity(object):
 def initial_conditions(c1,c, n_grid):
     """Set the initial condition values.
     """
-    print('c1',c1)
-    c.now[1:n_grid - 1] = 0
-    c.now[int(n_grid/2)] = c1
-    print('cinit',c.now)
+    c.now[0:n_grid - 1] = 0
+    c.now[int(n_grid/3)] = c1
+    
 
 def boundary_conditions(c_array, n_grid):
     """Set the boundary condition values.
@@ -120,8 +118,9 @@ def scheme(c, u, k, n_grid, dt, dx):
     derived from equations 4.16 and 4.17.
     """
     for pt in np.arange(1, n_grid - 1):
-        c.next[pt] = c.now[pt] - u*(dt/dx)*(c.now[pt + 1] - c.now[pt])  + k* (dt/(dx^2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1]) 
-        print('cnx',c.next)
+
+        c.next[pt] = c.now[pt] - u*(dt/dx)*(c.now[pt] - c.now[pt-1])  + k* (dt/(dx**2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1]) 
+
 #     Alternate vectorized implementation:
 #     u.next[1:n_grid - 1] = (u.prev[1:n_grid - 1]
 #                             - gu * (h.now[2:n_grid] - h.now[:n_grid - 2]))
@@ -163,6 +162,7 @@ def make_graph(c, dt, n_time):
         ax_c.plot(c.store[:, time], color=colorVal)
         #ax_h.plot(h.store[:, time], color=colorVal)
 
+
     # Add the custom colorbar
     ax2 = fig.add_axes([0.95, 0.05, 0.05, 0.9])
     cb1 = colorbar.ColorbarBase(ax2, cmap=cmap, norm=cNorm_inseconds)
@@ -183,9 +183,10 @@ def numeric(args):
     u = 3.39 #wind speed in x direction in m/s
     k = 2    #eddy diffusivity coefficient in m^2/s
     c1 = 100.0   #initial pollution amount g/m3
-    dt = 0.1                  # time step [s]
-    dx = 5   #stepsize
-    
+    domain_length = 200000 #200km
+ 
+    dx = domain_length/n_grid   #stepsize
+    dt = 0.4 * dx/ u                  # time step [s]
     # Create velocity and surface height objects
     c = Quantity(n_grid, n_time)
 
@@ -193,7 +194,7 @@ def numeric(args):
     # results arrays
 
     initial_conditions(c1,c, n_grid)
-    #c.store_timestep(0, 'prev')
+    #c.store_timestep(0, 'now')
 
     # Calculate the first time step values from the
     # predictor-corrector, apply the boundary conditions, and store
@@ -201,19 +202,21 @@ def numeric(args):
     
     #first_time_step(u, h, g, H, dt, dx, ho, gu, gh, n_grid)
     boundary_conditions(c.now, n_grid)
-    c.store_timestep(1, 'now')
-    print('cbd',c.now)
+    
+    c.store_timestep(0, 'now')
+
 
     # Time step loop using leap-frog scheme
-    for t in np.arange(2, n_time):
+    for t in np.arange(1, n_time):
         # Advance the solution and apply the boundary conditions
         scheme(c, u, k, n_grid, dt, dx)
         boundary_conditions(c.next, n_grid)
         # Store the values in the time step results arrays, and shift
         # .now to .prev, and .next to .now in preparation for the next
         # time step
+
         c.store_timestep(t)
-        print('cit',c.now)
+#         print('c_curent',c.now)
         c.shift()
 
     # Plot the results as colored graphs
