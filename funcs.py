@@ -127,6 +127,45 @@ def scheme(c, u, k, n_grid, dt, dx):
 #     h.next[1:n_grid - 1] = (h.prev[1:n_grid - 1]
 #                             - gh * (u.now[2:n_grid] - u.now[:n_grid - 2]))
 
+def Crank_Nicolson(c, u, k, n_grid, dt, dx):
+    while True:
+        c_old = c.next
+        for pt in np.arange(1, n_grid - 1):
+            c.next[pt] = c.now[pt] - ((u*dt)/(4*dx))*(c_old[pt+1] - c_old[pt-1] + c.now[pt+1] - c.now[pt-1]) + ((k*dt)/(2*(dx**2)))*(c_old[pt-1] - 2*c_old[pt] + c_old[pt+1] + c.now[pt-1] - 2*c.now[pt] + c.now[pt+1])
+        
+        change = (c.next - c_old)/c_old
+        if (max(change) <0.05):               
+            break
+
+def Upstream(c, u, k, n_grid, dt, dx):
+
+#    for pt in np.arange(1, n_grid - 1):
+#        c.next[pt] = c.now[pt] - u*(dt/dx)*(c.now[pt + 1] - c.now[pt])  + k* (dt/(dx**2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1]) 
+
+    for pt in np.arange(1, n_grid - 1):
+        c.next[pt] = c.now[pt] - u*(dt/dx)*(c.now[pt] - c.now[pt - 1])  + ((k*dt)/(dx**2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1])         
+
+    
+def nsdf(c,u,K, n_grid,dt,dx):
+  """The non-standard finite difference method given by (Appadu, 2013, doi: 10.1155/2013/734374)"""
+  k = 0.005 # given by paper as most accurate coefficient
+  h = 0.02  # given by paper as most accurate coeficient
+  a1 = k/h  # coefficient to tidy up equation
+  b1 = a1/(np.exp(h/K)-1) # coefficient to tidy up equation
+ 
+  for pt in np.arange(1, n_grid-1):
+    c.next[pt] = b1*c.now[pt+1]+(1-a1*u-2*b1)*c.now[pt]+(a1*u+b1)*c.now[pt-1]      
+  print(b1,(1-a1*u-2*b1),(a1*u+b1))
+
+def Lax_Wendroff(c, u, k, n_grid, dt, dx):
+    """Calculate the next time step values using the leap-frog scheme
+    derived from equations 4.16 and 4.17.
+    """
+    for pt in np.arange(2, n_grid - 2): #note that the grid range is changed
+         c.next[pt] = c.now[pt] - u*(dt/(2*dx))*(c.now[pt + 1] - c.now[pt-1])  + (u**2*dt+2*k) * (dt/(2*dx**2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1]) - (k*u*dt**2)/(2*dx**3)*(-c.now[pt-2]+2*c.now[pt-1]-2*c.now[pt+1]+c.now[pt+2])
+
+         if (c.next[pt]<0):
+            c.next[pt]=0
 
 def make_graph(c, dt, n_time):
     """Create graphs of the model results using matplotlib.
@@ -181,12 +220,12 @@ def numeric(args):
 
     # Constants and parameters of the model
     u = 3.39 #wind speed in x direction in m/s
-    k = 2    #eddy diffusivity coefficient in m^2/s
+    k = 2.0   #eddy diffusivity coefficient in m^2/s
     c1 = 100.0   #initial pollution amount g/m3
     domain_length = 200000 #200km
  
     dx = domain_length/n_grid   #stepsize
-    dt = 0.4 * dx/ u                  # time step [s]
+    dt = 500                  # time step [s]
     # Create velocity and surface height objects
     c = Quantity(n_grid, n_time)
 
@@ -209,7 +248,7 @@ def numeric(args):
     # Time step loop using leap-frog scheme
     for t in np.arange(1, n_time):
         # Advance the solution and apply the boundary conditions
-        scheme(c, u, k, n_grid, dt, dx)
+        Upstream(c, u, k, n_grid, dt, dx)
         boundary_conditions(c.next, n_grid)
         # Store the values in the time step results arrays, and shift
         # .now to .prev, and .next to .now in preparation for the next
