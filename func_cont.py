@@ -37,6 +37,7 @@ import matplotlib.colors as colors
 import matplotlib.cm as cmx
 import matplotlib.colorbar as colorbar
 import os,glob
+import math
 
 class Quantity(object):
     """Generic quantity to define the data structures and method that
@@ -120,6 +121,7 @@ def scheme(c, u, k, n_grid, dt, dx):
     for pt in np.arange(1, n_grid - 1):
 
         c.next[pt] = c.now[pt] - u*(dt/dx)*(c.now[pt] - c.now[pt-1])  + k* (dt/(dx**2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1]) 
+    
 
 #     Alternate vectorized implementation:
 #     u.next[1:n_grid - 1] = (u.prev[1:n_grid - 1]
@@ -127,7 +129,17 @@ def scheme(c, u, k, n_grid, dt, dx):
 #     h.next[1:n_grid - 1] = (h.prev[1:n_grid - 1]
 #                             - gh * (u.now[2:n_grid] - u.now[:n_grid - 2]))
 
-def Crank_Nicolson(c, u, k, n_grid, dt, dx):
+def analytic(c_an,u,k,t,x,n_grid,c1):
+    for i in range(0,len(x)):
+        if i<int(n_grid/3):
+            c =0
+        else:
+            c = (c1/2)*math.erfc((x[i]-(u*t))/(2*k*t))
+        c_an.next[i] = c
+
+
+
+def Crank_Nicolson(c, u, k, n_grid, dt, dx,c1):
     
     a = (u*dt)/(4*dx)
     b = (k*dt)/(2*(dx**2))
@@ -164,7 +176,7 @@ def Crank_Nicolson(c, u, k, n_grid, dt, dx):
     nxt = np.matmul(np.linalg.inv(cof1_all),rhs)
     for pt in np.arange(1, n_grid - 1):
         c.next[pt] = max(0,nxt[pt])
-
+    c.next[int(n_grid/3)] =  c1
     
 #     while True:
 #         c_old = c.next
@@ -176,13 +188,14 @@ def Crank_Nicolson(c, u, k, n_grid, dt, dx):
 #             break
 
 
-def Upstream(c, u, k, n_grid, dt, dx):
+def Upstream(c, u, k, n_grid, dt, dx,c1):
 
 #    for pt in np.arange(1, n_grid - 1):
 #        c.next[pt] = c.now[pt] - u*(dt/dx)*(c.now[pt + 1] - c.now[pt])  + k* (dt/(dx**2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1]) 
 
     for pt in np.arange(1, n_grid - 1):
-        c.next[pt] = c.now[pt] - u*(dt/dx)*(c.now[pt] - c.now[pt - 1])  + ((k*dt)/(dx**2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1])       
+        c.next[pt] = c.now[pt] - u*(dt/dx)*(c.now[pt] - c.now[pt - 1])  + ((k*dt)/(dx**2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1])         
+    c.next[int(n_grid/3)] = c1
 
 
 def FCTS(c, u, k, n_grid, dt, dx):
@@ -195,7 +208,7 @@ def FCTS(c, u, k, n_grid, dt, dx):
     #print((k*dt)/(dx**2))
 
     
-def nsdf(c,u,K, n_grid,dt,dx):
+def nsdf(c,u,K, n_grid,dt,dx, c1):
   """The non-standard finite difference method given by (Appadu, 2013, doi: 10.1155/2013/734374)"""
   k = 5 # given by paper as most accurate coefficient
   h = 20  # given by paper as most accurate coeficient
@@ -204,9 +217,9 @@ def nsdf(c,u,K, n_grid,dt,dx):
  
   for pt in np.arange(1, n_grid-1):
     c.next[pt] = b1*c.now[pt+1]+(1-a1*u-2*b1)*c.now[pt]+(a1*u+b1)*c.now[pt-1]      
+  c.next[int(n_grid/3)] =  c1
 
-
-def Lax_Wendroff(c, u, k, n_grid, dt, dx):
+def Lax_Wendroff(c, u, k, n_grid, dt, dx, c1):
     """Calculate the next time step values using the leap-frog scheme
     derived from equations 4.16 and 4.17.
     """
@@ -215,7 +228,8 @@ def Lax_Wendroff(c, u, k, n_grid, dt, dx):
 #         c.next[pt] = c.now[pt] - u*(dt/(2*dx))*(c.now[pt + 1] - c.now[pt-1])  + (u**2*dt) * (dt/(2*dx^2))*(c.now[pt + 1] - 2*c.now[pt] + c.now[pt - 1]) 
         if (c.next[pt]<0):
             c.next[pt]=0
-
+    c.next[int(n_grid/3)] = c1
+    
 def make_graph(c, dt, n_time):
     """Create graphs of the model results using matplotlib.
 
@@ -242,7 +256,7 @@ def make_graph(c, dt, n_time):
 
     # Only try to plot 20 lines, so choose an interval if more than that (i.e. plot
     # every interval lines
-    interval = np.int(np.ceil(n_time/500))
+    interval = np.int(np.ceil(n_time/50))
 
     # Do the main plot
     for time in range(0, n_time, interval):
@@ -278,11 +292,13 @@ def numeric(args):
     dt = courant * dx/u                  # time step [s]
     # Create velocity and surface height objects
     c = Quantity(n_grid, n_time)
+    c_an = Quantity(n_grid, n_time)
 
     # Set up initial conditions and store them in the time step
     # results arrays
 
     initial_conditions(c1,c, n_grid)
+    initial_conditions(c1,c_an, n_grid)
     #c.store_timestep(0, 'now')
 
     # Calculate the first time step values from the
@@ -291,25 +307,42 @@ def numeric(args):
     
     #first_time_step(u, h, g, H, dt, dx, ho, gu, gh, n_grid)
     boundary_conditions(c.now, n_grid)
+    boundary_conditions(c_an.now, n_grid)
     
     c.store_timestep(0, 'now')
+    c_an.store_timestep(0, 'now')
+    
 
-
+    x = np.zeros(n_grid)
+    dxx = 0
+    for i in range(n_grid):
+        if(i < int(n_grid/3)):
+            pass
+        else:
+            x[i]=x[i]+dxx
+            dxx = dxx + dx
+      
     # Time step loop using leap-frog scheme
+    t_val = 0
     for t in np.arange(1, n_time):
         # Advance the solution and apply the boundary conditions
-        Upstream(c, u, k, n_grid, dt, dx)
+        Upstream(c, u, k, n_grid, dt, dx,c1)
+        t_val = t_val + dt
+        analytic(c_an,u,k,t_val,x,n_grid,c1)
         boundary_conditions(c.next, n_grid)
+        boundary_conditions(c_an.next, n_grid)
         # Store the values in the time step results arrays, and shift
         # .now to .prev, and .next to .now in preparation for the next
         # time step
 
         c.store_timestep(t)
-#         print('c_curent',c.now)
+        c_an.store_timestep(t)
         c.shift()
+        c_an.shift()
 
     # Plot the results as colored graphs
     make_graph(c, dt, n_time)
+    make_graph(c_an, dt, n_time)
     return
 
 
